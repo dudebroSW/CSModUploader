@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+	<PublishSingleFile>true</PublishSingleFile>
+	<SelfContained>true</SelfContained>
+	<AssemblyName>CSModUploader</AssemblyName>
+	<Version>0.0.1</Version>
+	<FileVersion>0.0.1.0</FileVersion>
+	<Company>DudebroSW</Company>
+	<Product>Contractor$ Mod Uploader</Product>
+  </PropertyGroup>
+
+</Project>
