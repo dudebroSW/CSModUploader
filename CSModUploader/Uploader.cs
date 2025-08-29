@@ -9,7 +9,7 @@ using System.Text.RegularExpressions;
 /// <summary>
 /// 
 /// </summary>
-internal class Program
+internal class Uploader
 {
     private const int ChunkSizeBytes = 50 * 1024 * 1024;
     private const int CsGameId = 251;
