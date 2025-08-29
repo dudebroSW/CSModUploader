@@ -13,6 +13,9 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: write
+
 jobs:
   release:
     runs-on: windows-latest
@@ -58,8 +61,11 @@ jobs:
           $pub = Join-Path (Split-Path $env:PROJECT_FILE -Parent) "bin\Release\net8.0\win-x64\publish"
           $exe = Get-ChildItem $pub -Filter *.exe | Select-Object -First 1
           if (-not $exe) { throw "No .exe found in $pub" }
-          $zip = "dist\$($env:PROJECT_NAME)-win-x64-$($env:VERSION).zip"
+
+          $zip = "dist/$($env:PROJECT_NAME)-win-x64-$($env:VERSION).zip"
           Compress-Archive -Path $exe.FullName -DestinationPath $zip -Force
+
+          $zip = $zip -replace '\\','/'
           "ASSET_PATH=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Upload artifact (for CI browsing)
