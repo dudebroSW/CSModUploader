@@ -1,0 +1,77 @@
+name: Build & Release (Windows EXE)
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v1.0.0). If omitted, use push tag.'
+        required: true
+      prerelease:
+        description: 'Mark the release as a prerelease'
+        type: boolean
+        default: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Resolve project (.csproj)
+        shell: pwsh
+        run: |
+          $proj = Get-ChildItem -Recurse -Filter *.csproj | Select-Object -First 1
+          if (-not $proj) { throw "No .csproj found. If you have multiple, set PROJECT_FILE explicitly." }
+          "PROJECT_FILE=$($proj.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "PROJECT_NAME=$([IO.Path]::GetFileNameWithoutExtension($proj.Name))" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Compute version
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "push") {
+            $v = "${{ github.ref }}".Replace('refs/tags/','')
+          } else {
+            $v = "${{ github.event.inputs.tag }}"
+          }
+          if (-not $v) { throw "No version tag provided." }
+          "VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Restore & Publish (win-x64, self-contained, single file)
+        shell: pwsh
+        run: |
+          dotnet restore "$env:PROJECT_FILE"
+          dotnet publish "$env:PROJECT_FILE" -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+
+      - name: Package artifact
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $pub = Join-Path (Split-Path $env:PROJECT_FILE -Parent) "bin\Release\net8.0\win-x64\publish"
+          $exe = Get-ChildItem $pub -Filter *.exe | Select-Object -First 1
+          if (-not $exe) { throw "No .exe found in $pub" }
+          $zip = "dist\$($env:PROJECT_NAME)-win-x64-$($env:VERSION).zip"
+          Compress-Archive -Path $exe.FullName -DestinationPath $zip -Force
+          "ASSET_PATH=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload artifact (for CI browsing)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PROJECT_NAME }}-win-x64-${{ env.VERSION }}
+          path: ${{ env.ASSET_PATH }}
+
+      - name: Create / Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.VERSION }}
+          files: ${{ env.ASSET_PATH }}
+          prerelease: ${{ github.event.inputs.prerelease }}
+          generate_release_notes: true
