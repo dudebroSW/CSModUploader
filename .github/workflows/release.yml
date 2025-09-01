@@ -87,3 +87,4 @@ jobs:
           files: ${{ env.ASSET_PATH }}
           prerelease: ${{ github.event.inputs.prerelease }}
           generate_release_notes: true
+          token: ${{ secrets.RELEASE_PAT }}
