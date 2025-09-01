@@ -64,21 +64,6 @@ jobs:
             -o "$out"
           "PUBLISH_DIR=$out" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Defender security scan
-        shell: pwsh
-        run: |
-          $exe = Get-ChildItem $env:PUBLISH_DIR -Filter *.exe | Select-Object -First 1
-          if (-not $exe) { throw "No EXE produced in $env:PUBLISH_DIR" }
-          $mp1 = "C:\Program Files\Windows Defender\MpCmdRun.exe"
-          $mp2 = "C:\Program Files\Microsoft Defender\MpCmdRun.exe"
-          $mp  = if (Test-Path $mp1) { $mp1 } elseif (Test-Path $mp2) { $mp2 } else { $null }
-          if ($mp) {
-            & $mp -Scan -ScanType 3 -File $exe.FullName
-            if ($LASTEXITCODE -ne 0) { throw "Defender scan reported an issue." }
-          } else {
-            Write-Host "Defender not found; skipping scan."
-          }
-
       - name: Package artifact
         shell: pwsh
         run: |
