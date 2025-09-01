@@ -258,44 +258,6 @@ internal class Uploader
     /// <param name="gameId"></param>
     /// <param name="modId"></param>
     /// <param name="uploadId"></param>
-    /// <param name="changelog"></param>
-    /// <param name="label"></param>
-    /// <returns></returns>
-    /// <exception cref="InvalidOperationException"></exception>
-    private static async Task<long> UploadModfileAsync(HttpClient http, string baseUri, string gameId, string modId, string uploadId, string changelog, string label)
-    {
-        using var form = new MultipartFormDataContent
-        {
-            { new StringContent(uploadId), "upload_id" },
-            { new StringContent(changelog), "changelog"}
-        };
-
-        using var resp = await http.PostAsync($"{baseUri}/games/{gameId}/mods/{modId}/files", form);
-        var json = await EnsureJsonAsync(resp, "Upload Modfile (from upload_id)");
-
-        if (json.RootElement.TryGetProperty("id", out var idEl) && idEl.TryGetInt64(out var id))
-        {
-            Console.WriteLine($"[{label}] Modfile created from upload {uploadId}. id={id}");
-            return id;
-        }
-
-        if (resp.Headers.Location is Uri loc && long.TryParse(loc.Segments.Last().TrimEnd('/'), out var fromLoc))
-        {
-            Console.WriteLine($"[{label}] Modfile created (via Location). id={fromLoc}");
-            return fromLoc;
-        }
-
-        throw new InvalidOperationException("Add Modfile response did not contain a modfile id.");
-    }
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="http"></param>
-    /// <param name="baseUri"></param>
-    /// <param name="gameId"></param>
-    /// <param name="modId"></param>
-    /// <param name="uploadId"></param>
     /// <returns></returns>
     private static async Task<int> GetMultipartStatusAsync(HttpClient http, string baseUri, string gameId, string modId, string uploadId)
     {
@@ -324,6 +286,44 @@ internal class Uploader
         }
 
         return 0;
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="http"></param>
+    /// <param name="baseUri"></param>
+    /// <param name="gameId"></param>
+    /// <param name="modId"></param>
+    /// <param name="uploadId"></param>
+    /// <param name="changelog"></param>
+    /// <param name="label"></param>
+    /// <returns></returns>
+    /// <exception cref="InvalidOperationException"></exception>
+    private static async Task<long> UploadModfileAsync(HttpClient http, string baseUri, string gameId, string modId, string uploadId, string changelog, string label)
+    {
+        using var form = new MultipartFormDataContent
+        {
+            { new StringContent(uploadId), "upload_id" },
+            { new StringContent(changelog), "changelog"}
+        };
+
+        using var resp = await http.PostAsync($"{baseUri}/games/{gameId}/mods/{modId}/files", form);
+        var json = await EnsureJsonAsync(resp, "Upload Modfile (from upload_id)");
+
+        if (json.RootElement.TryGetProperty("id", out var idEl) && idEl.TryGetInt64(out var id))
+        {
+            Console.WriteLine($"[{label}] Modfile created from upload {uploadId}. id={id}");
+            return id;
+        }
+
+        if (resp.Headers.Location is Uri loc && long.TryParse(loc.Segments.Last().TrimEnd('/'), out var fromLoc))
+        {
+            Console.WriteLine($"[{label}] Modfile created (via Location). id={fromLoc}");
+            return fromLoc;
+        }
+
+        throw new InvalidOperationException("Add Modfile response did not contain a modfile id.");
     }
 
     /// <summary>
@@ -369,35 +369,6 @@ internal class Uploader
         using var resp = await http.PostAsync($"{baseUri}/games/{gameId}/mods/{modId}", form);
         await EnsureJsonAsync(resp, "Edit Mod");
         Console.WriteLine("\nEdit Mod: metadata_blob updated successfully!");
-    }
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="http"></param>
-    /// <param name="baseUri"></param>
-    /// <param name="gameId"></param>
-    /// <param name="modId"></param>
-    /// <param name="tags"></param>
-    /// <returns></returns>
-    /// <exception cref="HttpRequestException"></exception>
-    private static async Task AddModTagsAsync(HttpClient http, string baseUri, string gameId, string modId, IEnumerable<string> tags)
-    {
-        var pairs = new List<KeyValuePair<string, string>>();
-        foreach (var t in tags)
-        {
-            if (!string.IsNullOrWhiteSpace(t))
-                pairs.Add(new KeyValuePair<string, string>("tags[]", t));
-        }
-
-        using var form = new FormUrlEncodedContent(pairs);
-        using var resp = await http.PostAsync($"{baseUri}/games/{gameId}/mods/{modId}/tags", form);
-        var body = await resp.Content.ReadAsStringAsync();
-
-        if (!resp.IsSuccessStatusCode)
-            throw new HttpRequestException($"Add Mod Tags failed: {(int)resp.StatusCode} {resp.ReasonPhrase}\n{body}");
-
-        Console.WriteLine("Added tags: " + string.Join(", ", tags));
     }
 
     /// <summary>
