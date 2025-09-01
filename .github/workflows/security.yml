@@ -2,7 +2,7 @@ name: VirusTotal scan
 
 on:
   release:
-    types: [published, edited]
+    types: [published]
 
 permissions:
   contents: write
