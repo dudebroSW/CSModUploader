@@ -143,7 +143,7 @@ internal class Uploader
 
         if (TryLoadCachedToken(out var cached, out var cachedExp))
         {
-            Console.WriteLine($"Using cached token (expires {cachedExp:u}).");
+            Console.WriteLine($"\nLogin successful.\nUsing cached access token (expires {cachedExp:u}).");
             return cached;
         }
 
