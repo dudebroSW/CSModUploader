@@ -22,7 +22,6 @@ internal class Uploader
     /// <returns></returns>
     private static async Task<int> Main(string[] args)
     {
-        int exitCode = 0;
         var pause = args.Any(a => a.Equals("--pause", StringComparison.OrdinalIgnoreCase) || a.Equals("-p", StringComparison.OrdinalIgnoreCase));
 
         Console.WriteLine("=== Contractor$ Mod Uploader (DudebroSW) ===");
@@ -49,7 +48,7 @@ internal class Uploader
 
         if (!ValidateInputs(gameId, modId, accessToken, serverZip, pcZip, androidZip))
         {
-            return exitCode = 1;
+            return 1;
         }
 
         var baseUri = $"https://g-{gameId}.modapi.io/v1";
@@ -89,21 +88,21 @@ internal class Uploader
 
             Console.WriteLine($"\n{modName} successfully updated!");
 
-            return exitCode = 0;
+            return 0;
         }
         catch (HttpRequestException ex)
         {
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"HTTP error: {ex.Message}");
             Console.ResetColor();
-            return exitCode = 2;
+            return 2;
         }
         catch (Exception ex)
         {
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"Error: {ex}");
             Console.ResetColor();
-            return exitCode = 3;
+            return 3;
         }
         finally
         {
