@@ -18,7 +18,7 @@ The game's current modkit uses deprecated endpoints with strict file-size limits
 ## How to use
 
 1) **Download & run**
-    - Grab the latest release ZIP from GitHub, extract it, and run the `CSModUploader.exe`.
+    - Grab the [latest release ZIP](https://github.com/dudebroSW/CSModUploader/releases/download/v0.0.3/CSModUploader-win-x64-v0.0.3.zip) from GitHub, extract it, and run the `CSModUploader.exe`.
 
 2) **Authenticate (access token or email code)**
     - When prompted `Access Token (leave blank to login by email):`
