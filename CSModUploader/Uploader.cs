@@ -5,15 +5,31 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Configuration;
 
 /// <summary>
 /// 
 /// </summary>
 internal class Uploader
 {
+    private static IConfiguration? Config;
+
     private const int ChunkSizeBytes = 50 * 1024 * 1024;
     private const int CsGameId = 251;
     private const string TemplateMetadataBlob = "{\\r\\n\\t\\\"serverFileId\\\": 0000000,\\r\\n\\t\\\"windowsFileId\\\": 0000000,\\r\\n\\t\\\"androidFileId\\\": 0000000,\\r\\n\\t\\\"pluginRoot\\\": \\\"TemplatePluginRoot\\\",\\r\\n\\t\\\"modDataPaths\\\": [\\r\\n\\t\\t\\\"TemplateModDataPath\\\"\\r\\n\\t]\\r\\n}";
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <returns></returns>
+    private static IConfiguration BuildConfig()
+    {
+        return new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
+            .AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: false)
+            .Build();
+    }
 
     /// <summary>
     /// 
@@ -22,17 +38,23 @@ internal class Uploader
     /// <returns></returns>
     private static async Task<int> Main(string[] args)
     {
+        Config = BuildConfig();
+
         var pause = args.Any(a => a.Equals("--pause", StringComparison.OrdinalIgnoreCase) || a.Equals("-p", StringComparison.OrdinalIgnoreCase));
 
-        Console.WriteLine("=== Contractor$ Mod Uploader (DudebroSW) ===");
+        Console.WriteLine("=== Contractor$ Mod Uploader (by dudebroSW) ===");
 
         var gameId = CsGameId.ToString();
+        var baseUri = $"https://g-{gameId}.modapi.io/v1";
+
+        using var http = new HttpClient();
+        http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        string accessToken = await AcquireAccessTokenAsync(http, baseUri);
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
         Console.Write("\nMod ID (numeric): ");
         var modId = Console.ReadLine()?.Trim() ?? "";
-
-        Console.Write("\nOAuth Access Token (Authorization: Bearer ...): ");
-        var accessToken = Console.ReadLine()?.Trim() ?? "";
 
         Console.Write("\nFolder containing packaged .zip files: ");
         var zipFolder = Console.ReadLine()?.Trim() ?? "";
@@ -50,12 +72,6 @@ internal class Uploader
         {
             return 1;
         }
-
-        var baseUri = $"https://g-{gameId}.modapi.io/v1";
-
-        using var http = new HttpClient();
-        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
         try
         {
@@ -112,6 +128,108 @@ internal class Uploader
                 try { Console.ReadLine(); } catch { }
             }
         }
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="http"></param>
+    /// <param name="baseUri"></param>
+    /// <returns></returns>
+    /// <exception cref="InvalidOperationException"></exception>
+    private static async Task<string> AcquireAccessTokenAsync(HttpClient http, string baseUri)
+    {
+        var apiKey = Config?["ModIo:CsGameApiKey"];
+
+        if (TryLoadCachedToken(out var cached, out var cachedExp))
+        {
+            Console.WriteLine($"Using cached token (expires {cachedExp:u}).");
+            return cached;
+        }
+
+        Console.Write("\nAccess Token (leave blank to login by email): ");
+        var pasted = Console.ReadLine()?.Trim() ?? "";
+        if (!string.IsNullOrEmpty(pasted))
+        {
+            Console.WriteLine("Using pasted token (not cached since expiry is unknown).");
+            return pasted;
+        }
+
+        Console.Write("Email address registered with mod.io account: ");
+        var email = Console.ReadLine()?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(email))
+            throw new InvalidOperationException("Email is required.");
+
+        await RequestEmailCodeAsync(http, baseUri, apiKey, email);
+
+        Console.Write("Enter the security code sent to your email: ");
+        var code = (Console.ReadLine() ?? "").Trim();
+
+        var (token, expUtc) = await ExchangeEmailCodeAsync(http, baseUri, apiKey, code);
+        SaveToken(token, expUtc);
+        Console.WriteLine("Login successful (token cached).");
+
+        return token;
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="http"></param>
+    /// <param name="baseUri"></param>
+    /// <param name="apiKey"></param>
+    /// <param name="email"></param>
+    /// <returns></returns>
+    private static async Task RequestEmailCodeAsync(HttpClient http, string baseUri, string? apiKey, string email)
+    {
+        using var form = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["email"] = email,
+            ["api_key"] = apiKey ?? string.Empty,
+        });
+
+        using var resp = await http.PostAsync($"{baseUri}/oauth/emailrequest", form);
+        await EnsureJsonAsync(resp, "Request Email Security Code");
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="http"></param>
+    /// <param name="baseUri"></param>
+    /// <param name="apiKey"></param>
+    /// <param name="securityCode"></param>
+    /// <returns></returns>
+    /// <exception cref="InvalidOperationException"></exception>
+    private static async Task<(string token, DateTimeOffset expiresUtc)> ExchangeEmailCodeAsync(HttpClient http, string baseUri, string? apiKey, string securityCode)
+    {
+        using var form = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["security_code"] = securityCode,
+            ["api_key"] = apiKey ?? string.Empty,
+        });
+
+        using var resp = await http.PostAsync($"{baseUri}/oauth/emailexchange", form);
+        var json = await EnsureJsonAsync(resp, "Exchange Email Security Code");
+
+        if (!json.RootElement.TryGetProperty("access_token", out var at) || at.ValueKind != JsonValueKind.String)
+            throw new InvalidOperationException("Email exchange response did not include 'access_token'.");
+
+        string token = at.GetString()!;
+
+        DateTimeOffset expiresUtc;
+        if (json.RootElement.TryGetProperty("date_expires", out var de) &&
+            de.ValueKind == JsonValueKind.Number &&
+            de.TryGetInt64(out var unix))
+        {
+            expiresUtc = DateTimeOffset.FromUnixTimeSeconds(unix).ToUniversalTime();
+        }
+        else
+        {
+            expiresUtc = DateTimeOffset.UtcNow.AddMinutes(1);
+        }
+
+        return (token, expiresUtc);
     }
 
     /// <summary>
@@ -621,6 +739,90 @@ internal class Uploader
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <returns></returns>
+    private static string GetTokenCachePath()
+    {
+        var dir = Path.Combine(AppContext.BaseDirectory, ".modio");
+        Directory.CreateDirectory(dir);
+        return Path.Combine(dir, "authentication.json");
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="token"></param>
+    /// <param name="expiresUtc"></param>
+    /// <returns></returns>
+    private static bool TryLoadCachedToken(out string token, out DateTimeOffset expiresUtc)
+    {
+        token = "";
+        expiresUtc = default;
+        var path = GetTokenCachePath();
+        if (!File.Exists(path)) return false;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            var root = doc.RootElement;
+
+            if (!root.TryGetProperty("access_token", out var at) || at.ValueKind != JsonValueKind.String)
+                return false;
+
+            token = at.GetString() ?? "";
+            if (string.IsNullOrWhiteSpace(token)) return false;
+
+            if (root.TryGetProperty("expires_utc", out var exStr) &&
+                exStr.ValueKind == JsonValueKind.String &&
+                DateTimeOffset.TryParse(exStr.GetString(), out var parsed))
+            {
+                expiresUtc = parsed.ToUniversalTime();
+            }
+            else if (root.TryGetProperty("date_expires", out var exNum) &&
+                     exNum.ValueKind == JsonValueKind.Number &&
+                     exNum.TryGetInt64(out var unix))
+            {
+                expiresUtc = DateTimeOffset.FromUnixTimeSeconds(unix).ToUniversalTime();
+            }
+            else
+            {
+                return false;
+            }
+
+            var skew = TimeSpan.FromMinutes(2);
+            if (DateTimeOffset.UtcNow + skew < expiresUtc)
+                return true;
+
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="token"></param>
+    /// <param name="expiresUtc"></param>
+    private static void SaveToken(string token, DateTimeOffset expiresUtc)
+    {
+        var path = GetTokenCachePath();
+        var obj = new
+        {
+            access_token = token,
+            // store both for flexibility
+            expires_utc = expiresUtc.ToUniversalTime().ToString("o"),
+            date_expires = (long)expiresUtc.ToUnixTimeSeconds()
+        };
+        var json = JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(path, json);
+        Console.WriteLine($"Saved token cache: {Path.GetFileName(path)} (expires {expiresUtc:u})");
     }
 
     /// <summary>

@@ -56,6 +56,16 @@ jobs:
         shell: pwsh
         run: dotnet restore "$env:PROJECT_FILE"
 
+      - name: Tokenize appsettings.json
+        shell: pwsh
+        run: |
+          $projDir = Split-Path $env:PROJECT_FILE -Parent
+          $cfg = Join-Path $projDir 'appsettings.json'
+          if (-not (Test-Path $cfg)) { exit 0 }
+          if (-not "${{ secrets.CSGAME_API_KEY }}") { throw "Secret CSGAME_API_KEY is not set." }
+          (Get-Content $cfg -Raw).Replace('__CSGAME_API_KEY__','${{ secrets.CSGAME_API_KEY }}') |
+            Set-Content $cfg -Encoding UTF8
+
       - name: Publish
         shell: pwsh
         run: |
@@ -77,12 +87,6 @@ jobs:
           Compress-Archive -Path $exe.FullName -DestinationPath $zip -Force
           $zip = $zip -replace '\\','/'
           "ASSET_PATH=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.PROJECT_NAME }}-win-x64-${{ env.VERSION }}
-          path: ${{ env.ASSET_PATH }}
 
       - name: Create / Update GitHub Release
         uses: softprops/action-gh-release@v2
