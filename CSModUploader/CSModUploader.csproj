@@ -8,10 +8,16 @@
 	<PublishSingleFile>true</PublishSingleFile>
 	<SelfContained>true</SelfContained>
 	<AssemblyName>CSModUploader</AssemblyName>
-	<Version>0.0.1</Version>
-	<FileVersion>0.0.1.0</FileVersion>
+	<AssemblyTitle>Contractor$VR Mod Uploader</AssemblyTitle>
 	<Company>DudebroSW</Company>
-	<Product>Contractor$ Mod Uploader</Product>
+	<Product>Contractor$VR Mod Uploader</Product>
+	<RepositoryUrl>https://github.com/dudebroSW/CSModUploader</RepositoryUrl>
+	<Version>0.0.2</Version>
+	<FileVersion>0.0.2.0</FileVersion>
+	<PublishTrimmed>false</PublishTrimmed>
+	<PublishReadyToRun>false</PublishReadyToRun>
+	<EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
+	<ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
 </Project>

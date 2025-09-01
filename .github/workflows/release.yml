@@ -33,11 +33,11 @@ jobs:
         shell: pwsh
         run: |
           $proj = Get-ChildItem -Recurse -Filter *.csproj | Select-Object -First 1
-          if (-not $proj) { throw "No .csproj found. If you have multiple, set PROJECT_FILE explicitly." }
+          if (-not $proj) { throw "No .csproj found." }
           "PROJECT_FILE=$($proj.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
           "PROJECT_NAME=$([IO.Path]::GetFileNameWithoutExtension($proj.Name))" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Compute version
+      - name: Find release version
         shell: pwsh
         run: |
           if ("${{ github.event_name }}" -eq "push") {
@@ -48,27 +48,48 @@ jobs:
           if (-not $v) { throw "No version tag provided." }
           "VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Restore & Publish (win-x64, self-contained, single file)
+      - name: Restore
+        shell: pwsh
+        run: dotnet restore "$env:PROJECT_FILE"
+
+      - name: Publish
         shell: pwsh
         run: |
-          dotnet restore "$env:PROJECT_FILE"
-          dotnet publish "$env:PROJECT_FILE" -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+          $out = "$env:RUNNER_TEMP\out\single"
+          dotnet publish "$env:PROJECT_FILE" -c Release -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:EnableCompressionInSingleFile=false `
+            --no-restore `
+            -o "$out"
+          "PUBLISH_DIR=$out" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Defender security scan
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem $env:PUBLISH_DIR -Filter *.exe | Select-Object -First 1
+          if (-not $exe) { throw "No EXE produced in $env:PUBLISH_DIR" }
+          $mp1 = "C:\Program Files\Windows Defender\MpCmdRun.exe"
+          $mp2 = "C:\Program Files\Microsoft Defender\MpCmdRun.exe"
+          $mp  = if (Test-Path $mp1) { $mp1 } elseif (Test-Path $mp2) { $mp2 } else { $null }
+          if ($mp) {
+            & $mp -Scan -ScanType 3 -File $exe.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Defender scan reported an issue." }
+          } else {
+            Write-Host "Defender not found; skipping scan."
+          }
 
       - name: Package artifact
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          $pub = Join-Path (Split-Path $env:PROJECT_FILE -Parent) "bin\Release\net8.0\win-x64\publish"
-          $exe = Get-ChildItem $pub -Filter *.exe | Select-Object -First 1
-          if (-not $exe) { throw "No .exe found in $pub" }
-
+          $exe = Get-ChildItem $env:PUBLISH_DIR -Filter *.exe | Select-Object -First 1
           $zip = "dist/$($env:PROJECT_NAME)-win-x64-$($env:VERSION).zip"
           Compress-Archive -Path $exe.FullName -DestinationPath $zip -Force
-
           $zip = $zip -replace '\\','/'
           "ASSET_PATH=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Upload artifact (for CI browsing)
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.PROJECT_NAME }}-win-x64-${{ env.VERSION }}
