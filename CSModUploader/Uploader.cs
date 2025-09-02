@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http.Headers;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -39,10 +40,10 @@ internal class Uploader
     private static async Task<int> Main(string[] args)
     {
         Config = BuildConfig();
+        var currentAssembly = Assembly.GetExecutingAssembly();
+        var assemblyName = currentAssembly.GetName();
 
-        var pause = args.Any(a => a.Equals("--pause", StringComparison.OrdinalIgnoreCase) || a.Equals("-p", StringComparison.OrdinalIgnoreCase));
-
-        Console.WriteLine("=== Contractor$ Mod Uploader (by dudebroSW) ===");
+        Console.WriteLine($"=== Contractor$ Mod Uploader v{assemblyName.Version} (by dudebroSW) ===");
 
         var gameId = CsGameId.ToString();
         var baseUri = $"https://g-{gameId}.modapi.io/v1";
@@ -122,7 +123,7 @@ internal class Uploader
         }
         finally
         {
-            if (pause || (Environment.UserInteractive && !Console.IsInputRedirected && !Console.IsOutputRedirected))
+            if (Environment.UserInteractive && !Console.IsInputRedirected && !Console.IsOutputRedirected)
             {
                 Console.WriteLine("\nDone. Press Enter to close...");
                 try { Console.ReadLine(); } catch { }
